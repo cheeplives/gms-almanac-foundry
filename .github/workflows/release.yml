@@ -1,26 +1,34 @@
-# A tag like v0.1.0 makes a GitHub release with module.json and module.zip, which the module's manifest address
-# (…/releases/latest/download/module.json) points at. The tag must match the version in module.json.
+# Releases the version in module.json: when main gets a version that has no release yet, this makes the GitHub release
+# (and its tag, v<version>) with module.json and module.zip, which the module's manifest address
+# (…/releases/latest/download/module.json) points at. So a release is: change the version in module.json and
+# CHANGELOG.md, and merge. It can also be run by hand from the Actions tab.
 name: Release
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
-      - name: The tag is the module's version
+      - name: Is this version already released?
+        id: version
         run: |
-          version="$(node -p "require('./module.json').version")"
-          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "module.json says $version but the tag is $GITHUB_REF_NAME"; exit 1; }
-      - run: zip -r module.zip module.json LICENSE README.md CHANGELOG.md scripts styles
+          tag="v$(node -p "JSON.parse(require('fs').readFileSync('module.json', 'utf8')).version")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "new=no" >> "$GITHUB_OUTPUT"; echo "$tag is already released"; else echo "new=yes" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.version.outputs.new == 'yes'
+        run: npm test
+      - if: steps.version.outputs.new == 'yes'
+        run: zip -r module.zip module.json LICENSE README.md CHANGELOG.md scripts styles
       - name: Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" module.json module.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md"
+        if: steps.version.outputs.new == 'yes'
+        run: gh release create "${{ steps.version.outputs.tag }}" module.json module.zip --target "$GITHUB_SHA" --title "${{ steps.version.outputs.tag }}" --notes "See CHANGELOG.md"

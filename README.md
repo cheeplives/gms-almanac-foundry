@@ -80,7 +80,8 @@ Hooks.on('gmsAlmanac.refreshed', state => { /* a fresh reading */ });
 dependencies). `scripts/vendor/engine.js` is a copy of GM's Almanac's `static/engine.js` (its calendar maths); copy it
 again when GM's Almanac changes its calendars.
 
-A release is a tag: push `v0.1.0` and the workflow attaches `module.json` and `module.zip` to a GitHub release, which
-is what the manifest address points at.
+A release is a new version on `main`: change `version` in `module.json` (and note it in `CHANGELOG.md`), merge, and the
+workflow makes the GitHub release `v<version>` with `module.json` and `module.zip`, which is what the manifest address
+points at.
 
 MIT licence.
