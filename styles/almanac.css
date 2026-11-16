@@ -1,0 +1,21 @@
+/* GM's Almanac Bridge: the window. Colours come from Foundry's own variables, so it follows the world's theme. */
+.gms-almanac .gma { display: flex; flex-direction: column; gap: 10px; }
+.gms-almanac .gma-campaign { font-size: var(--font-size-12, 12px); opacity: 0.75; }
+.gms-almanac .gma-shift { font-size: var(--font-size-24, 24px); line-height: 1.15; }
+.gms-almanac .gma-date { font-size: var(--font-size-16, 16px); }
+.gms-almanac .gma-weather { margin-top: 4px; }
+.gms-almanac .gma-moons { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: var(--font-size-12, 12px); opacity: 0.85; margin-top: 4px; }
+.gms-almanac .gma-empty, .gms-almanac .gma-warn { margin: 0; }
+.gms-almanac .gma-warn { font-size: var(--font-size-12, 12px); opacity: 0.8; }
+.gms-almanac h4 { margin: 0 0 4px; font-size: var(--font-size-14, 14px); }
+.gms-almanac .gma-clock { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.gms-almanac .gma-clock-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gms-almanac .gma-clock-fill { display: inline-flex; gap: 2px; }
+.gms-almanac .gma-clock-fill i { width: 9px; height: 14px; border: 1px solid currentColor; border-radius: 2px; opacity: 0.45; }
+.gms-almanac .gma-clock-fill i.on { background: currentColor; opacity: 0.9; }
+.gms-almanac .gma-clock button { flex: none; width: 26px; min-height: 26px; line-height: 1; padding: 0; }
+.gms-almanac .gma-lookup input { width: 100%; }
+.gms-almanac .gma-hits { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.gms-almanac .gma-hits button { text-align: left; }
+.gms-almanac .gma-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.gms-almanac .gma-actions button { flex: 1 1 auto; }

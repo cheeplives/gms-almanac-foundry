@@ -1,0 +1,11 @@
+{
+  "name": "gms-almanac-foundry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GM's Almanac Bridge: a Foundry VTT module that brings a GM's Almanac campaign into Foundry",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/core.test.mjs"
+  }
+}
