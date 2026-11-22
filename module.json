@@ -2,7 +2,7 @@
   "id": "gms-almanac",
   "title": "GM's Almanac Bridge",
   "description": "Brings a GM's Almanac campaign into Foundry: the campaign's date, shift, weather, moons and clocks in a small window for the whole table, time passed from either side, and the Encyclopedia as a journal that stays up to date.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "compatibility": { "minimum": "13", "verified": "14" },
   "authors": [{ "name": "GM's Almanac" }],
   "scripts": ["scripts/vendor/engine.js"],

@@ -16,6 +16,16 @@ export function siteBase(typed) {
   return s;
 }
 
+/** Whether two typed addresses are the same site: the key saved for one is only ever sent to that one. */
+export function sameSite(a, b) {
+  const norm = t => {
+    const s = siteBase(t);
+    if (!s) return '';
+    try { const u = new URL(s); return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`; } catch { return ''; }
+  };
+  return norm(a) !== '' && norm(a) === norm(b);
+}
+
 /** GM's Almanac's API with an API key (docs/API.md there). fetch is handed in for the tests. */
 export class AlmanacClient {
   constructor({ base, key, fetch: f = globalThis.fetch }) {
@@ -39,6 +49,36 @@ export class AlmanacClient {
   }
   get(action, query) { return this.call(action, { query }); }
   post(action, body) { return this.call(action, { body: body || {} }); }
+}
+
+/** The elements a note from the site may keep in a journal page: the same list the site cleans its notes to. */
+const NOTE_TAGS = new Set(['p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre', 'h1', 'h2', 'h3', 'blockquote', 'ul', 'ol', 'li', 'hr', 'a',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'aside']);
+const NOTE_DROP = 'script|style|template|noscript|iframe|frame|frameset|object|embed|applet|svg|math|head|title|textarea|select|button|form|audio|video|canvas';
+/**
+ * HTML from the site, cleaned again here before it is written into the world: the site address is a world setting, so
+ * what answers at it is not taken on trust. Every tag that stays is written out afresh from its name alone, with no
+ * attributes (a link keeps an http, https or mailto address), anything else loses its tag and keeps its text, and a
+ * script or the like goes with everything inside it. So no handler, style, picture or script reaches a journal page.
+ */
+export function cleanHtml(html) {
+  const s = String(html ?? '').replace(/<!--[\s\S]*?(-->|$)/g, '')
+    .replace(new RegExp(`<(${NOTE_DROP})\\b[\\s\\S]*?(<\\/\\1\\s*>|$)`, 'gi'), '');
+  const text = t => t.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^'">])*)>/g;
+  let out = '', at = 0;
+  for (let m; (m = tagRe.exec(s));) {
+    out += text(s.slice(at, m.index));
+    at = tagRe.lastIndex;
+    const tag = m[2].toLowerCase();
+    if (!NOTE_TAGS.has(tag)) continue;
+    if (m[1]) { if (tag !== 'br' && tag !== 'hr') out += `</${tag}>`; continue; }
+    if (tag !== 'a') { out += `<${tag}>`; continue; }
+    const h = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(m[3]);
+    const href = (h ? (h[1] ?? h[2] ?? h[3]) : '').replace(/[\u0000-\u0020\u007f]+/g, '');
+    out += /^(https?:\/\/|mailto:)/i.test(href) ? `<a href="${esc(href.replace(/&amp;/g, '&'))}">` : '<a>';
+  }
+  return out + text(s.slice(at));
 }
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -87,7 +127,7 @@ export const shiftSeconds = (n, spd, daySeconds = 86400) => Math.round(n * daySe
 
 const CATEGORIES = { location: 'Location', person: 'Person', item: 'Item', group: 'Group', vehicle: 'Vehicle', quest: 'Quest' };
 /** GM-only paragraphs become Foundry's own secret blocks, which players never see. */
-const asideToSecret = (html, newId) => String(html || '').replace(/<aside>([\s\S]*?)<\/aside>/g, (m, inner) => `<section class="secret" id="secret-${newId()}"><p>${inner}</p></section>`);
+const asideToSecret = (html, newId) => cleanHtml(html).replace(/<aside>([\s\S]*?)<\/aside>/g, (m, inner) => `<section class="secret" id="secret-${newId()}"><p>${inner}</p></section>`);
 
 /**
  * The Encyclopedia as the pages of one journal entry: a page per entry, and a GM-only page for an entry's GM notes.

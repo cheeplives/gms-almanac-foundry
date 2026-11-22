@@ -40,6 +40,10 @@ It is not listed on foundryvtt.com. Install it by its manifest address (below).
 The key is a client setting: it stays in your browser and is never sent to your players. It acts as you, in that one
 campaign, and you can revoke it in GM's Almanac at any time.
 
+The key is only ever sent to the address it was saved for. If the world's address is changed later, by you or by
+anyone else who can change world settings, the window says so and asks before your key goes to the new address. Say
+yes only if you know why it changed.
+
 If Foundry is served over `https`, GM's Almanac must be too: browsers refuse to call an `http` site from an `https`
 page.
 
@@ -63,6 +67,8 @@ almanac.state;                  // { name, shift, day, shiftName, date, label, w
 await almanac.passShifts(2);    // GM, with a read-and-write key
 await almanac.syncJournal();    // GM
 await almanac.refresh();
+await almanac.get('clocks');    // ask the site as your key may (see docs/API.md in GM's Almanac)
+await almanac.post('clock_tick', { id: 3, by: 1 });
 
 Hooks.on('gmsAlmanac.timeChanged', ({ from, to, label, weather }) => { /* the Almanac's clock moved */ });
 Hooks.on('gmsAlmanac.refreshed', state => { /* a fresh reading */ });

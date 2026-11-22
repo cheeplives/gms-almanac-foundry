@@ -1,7 +1,7 @@
 // node --test: core.mjs against a stand-in for GM's Almanac's API, with the real calendar engine.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AlmanacClient, siteBase, readState, tableState, journalPages, lookup, when, shiftSeconds, ID } from '../scripts/core.mjs';
+import { AlmanacClient, siteBase, sameSite, cleanHtml, readState, tableState, journalPages, lookup, when, shiftSeconds, ID } from '../scripts/core.mjs';
 
 await import('../scripts/vendor/engine.js');   // a plain script, as Foundry loads it: it leaves globalThis.Engine
 const E = globalThis.Engine;
@@ -115,4 +115,33 @@ test('the lookup finds an entry by its name or another name, exact matches first
   assert.deepEqual(lookup(entries, 'ford').map(e => e.name), ['Ford', 'Fordham', 'Burnt Ford']);
   assert.deepEqual(lookup(entries, 'crossing').map(e => e.name), ['Burnt Ford']);
   assert.deepEqual(lookup(entries, '  '), []);
+});
+
+test('a key is for one address: the same site however it is typed, and no other', () => {
+  assert.equal(sameSite('https://x.test/almanac/', 'x.test/almanac/index.html#/c/3'), true);
+  assert.equal(sameSite('https://X.test/almanac', 'https://x.test/almanac'), true);
+  assert.equal(sameSite('https://x.test/almanac', 'https://x.test.evil.example/almanac'), false);
+  assert.equal(sameSite('https://x.test/almanac', 'http://x.test/almanac'), false);
+  assert.equal(sameSite('https://x.test/almanac', 'https://x.test/other'), false);
+  assert.equal(sameSite('', ''), false);
+  assert.equal(sameSite('https://x.test', ''), false);
+});
+
+test('notes from the site are cleaned to plain formatting before they reach a journal page', () => {
+  assert.equal(cleanHtml('<p>Hi <strong>there</strong></p><aside>Hidden</aside>'), '<p>Hi <strong>there</strong></p><aside>Hidden</aside>');
+  assert.equal(cleanHtml('<p onclick="x()" style="color:red">A<script>alert(1)</script>B</p>'), '<p>AB</p>');
+  assert.equal(cleanHtml('<img src=x onerror=alert(1)><svg><a href="javascript:1">x</a></svg>ok'), 'ok');
+  assert.equal(cleanHtml('<a href="javascript:alert(1)">x</a> <a href="https://e.test/?a=1&amp;b=2" onmouseover="x">y</a>'), '<a>x</a> <a href="https://e.test/?a=1&amp;b=2">y</a>');
+  assert.equal(cleanHtml('<a href=" java\nscript:alert(1)">x</a>'), '<a>x</a>');
+  assert.equal(cleanHtml('<div class="secret">x</div><span>y</span><br/><hr>'), 'xy<br><hr>');
+  assert.equal(cleanHtml('1 < 2 and <b'), '1 &lt; 2 and &lt;b');
+  assert.equal(cleanHtml('<p title="a>b">t</p><p title=\'x>y\'>u</p>'), '<p>t</p><p>u</p>');
+  assert.equal(cleanHtml('<scr<script>x</script>ipt>alert(1)</script>'), 'alert(1)');   // pieced back together, it is still only text
+  assert.equal(cleanHtml('<iframe src="//e.test">in<!-- c --><style>p{}</style>out'), '');
+  assert.equal(cleanHtml(null), '');
+  // and so the journal's pages hold nothing the site slipped into a note
+  const plan = journalPages({ entries: [{ id: 1, name: 'Inn', notes: '<p>Fine</p><img src=x onerror=alert(1)><aside onclick="x()">Cellar<script>1</script></aside>', gm_notes: '<p>GM</p><iframe src="//e.test"></iframe>' }] }, [], (() => { let n = 0; return () => `id${++n}`; })());
+  const html = plan.create.map(p => p.text.content).join('\n');
+  assert.ok(!/onerror|onclick|<script|<img|<iframe/i.test(html), html);
+  assert.match(html, /<section class="secret" id="secret-id\d+"><p>Cellar<\/p><\/section>/);
 });
