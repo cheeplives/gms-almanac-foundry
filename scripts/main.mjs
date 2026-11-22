@@ -7,15 +7,20 @@
  *  - The active GM's client polls GM's Almanac and writes what every player may see (date, shift, weather, moons, the
  *    clocks everyone can read) into a hidden world setting, which every client's window reads. Players need no key.
  *  - A player who has their own API key may paste it too; their window then reads the campaign as they see it.
+ *  - The key goes only to the address it was saved for (keySite, kept beside it in the browser). The address is a
+ *    world setting, which other GMs, and anything else that can write world settings, can change: if it changes, the
+ *    key stays put until its owner says the new address may have it.
  */
-import { ID, AlmanacClient, readState, tableState, journalPages, lookup, when, shiftSeconds } from './core.mjs';
+import { ID, AlmanacClient, siteBase, sameSite, readState, tableState, journalPages, lookup, when, shiftSeconds } from './core.mjs';
 
 const E = globalThis.Engine;   // scripts/vendor/engine.js, loaded before this module
 const NAME = "GM's Almanac";
 let state = null, stamp = '', timer = null, failed = '', app = null, polling = false;
 
 const setting = key => game.settings.get(ID, key);
-const client = () => new AlmanacClient({ base: setting('site'), key: setting('apiKey') });
+/** This browser has a key, but the world's address is no longer the one the key was saved for. */
+const keyHeld = () => !!String(setting('apiKey') || '').trim() && !sameSite(setting('site'), setting('keySite'));
+const client = () => new AlmanacClient({ base: setting('site'), key: keyHeld() ? '' : setting('apiKey') });
 const hasKey = () => client().ready;
 /** One GM's client does the world's writing, so two GMs don't both post a chat line. */
 const leads = () => game.user.isGM && (game.users.activeGM ? game.users.activeGM.isSelf : true);
@@ -25,7 +30,10 @@ const shown = () => state || setting('table') || null;
 function registerSettings() {
   const redraw = () => { restart(); };
   game.settings.register(ID, 'site', { name: "GM's Almanac address", hint: 'Where your GM\'s Almanac lives, for example https://example.com/almanac', scope: 'world', config: true, type: String, default: '', onChange: redraw });
-  game.settings.register(ID, 'apiKey', { name: 'Your API key', hint: 'Made in GM\'s Almanac: At the Table → Use in a VTT or on stream → New API key. Pick "Read and write" to pass time from Foundry. It is kept in this browser only. Players can leave it empty.', scope: 'client', config: true, type: String, default: '', onChange: redraw });
+  game.settings.register(ID, 'apiKey', { name: 'Your API key', hint: 'Made in GM\'s Almanac: At the Table → Use in a VTT or on stream → New API key. Pick "Read and write" to pass time from Foundry. It is kept in this browser only. Players can leave it empty.', scope: 'client', config: true, type: String, default: '',
+    // pasting a key says where it is for: the address showing in the settings at that moment
+    onChange: async () => { await game.settings.set(ID, 'keySite', siteBase(setting('site'))); redraw(); } });
+  game.settings.register(ID, 'keySite', { scope: 'client', config: false, type: String, default: '', onChange: redraw });
   game.settings.register(ID, 'poll', { name: 'Look for changes every (seconds)', scope: 'world', config: true, type: Number, default: 15, range: { min: 5, max: 120, step: 5 }, onChange: redraw });
   game.settings.register(ID, 'chat', { name: 'Say in chat when time passes', hint: 'A line for everyone with the new date, shift and weather.', scope: 'world', config: true, type: Boolean, default: true });
   game.settings.register(ID, 'worldTime', { name: 'Move Foundry\'s world time with the Almanac', hint: 'When the Almanac\'s clock moves, Foundry\'s world time moves by the same share of a day, so calendar and lighting modules follow. Off by default: turn it on once the two clocks agree.', scope: 'world', config: true, type: Boolean, default: false });
@@ -145,6 +153,7 @@ class AlmanacWindow extends foundry.applications.api.ApplicationV2 {
       openSite: AlmanacWindow.#openSite,
       openEntry: AlmanacWindow.#openEntry,
       tick: AlmanacWindow.#tick,
+      trustSite: AlmanacWindow.#trustSite,
     },
   };
   #query = '';
@@ -152,6 +161,9 @@ class AlmanacWindow extends foundry.applications.api.ApplicationV2 {
   async _renderHTML() {
     const s = shown();
     const box = h('div', { class: 'gma' });
+    if (keyHeld()) box.append(h('div', { class: 'gma-warn' },
+      h('p', {}, `This world's GM's Almanac address is now ${siteBase(setting('site')) || 'empty'}. Your API key was saved for ${setting('keySite') || 'another address'}, so it has not been sent to the new one.`),
+      h('button', { type: 'button', 'data-action': 'trustSite' }, 'Use my key with this address')));
     if (!s) {
       box.append(h('p', { class: 'gma-empty' }, failed || (game.user.isGM
         ? 'Not connected yet. In Game Settings → Configure Settings → GM\'s Almanac Bridge, set the site address and your API key.'
@@ -207,6 +219,16 @@ class AlmanacWindow extends foundry.applications.api.ApplicationV2 {
   static #sync() { return AlmanacWindow.#guard(() => syncJournal()); }
   static #refresh() { return refresh(true); }
   static #openSite() { window.open(`${client().base}/index.html${shown()?.campaignId ? `#/c/${shown().campaignId}/table` : ''}`, '_blank', 'noopener'); }
+  static async #trustSite() {
+    const to = siteBase(setting('site'));
+    if (!to) return;
+    const yes = await foundry.applications.api.DialogV2.confirm({
+      window: { title: 'Send your API key to this address?' },
+      content: `<p>Your GM's Almanac API key will be sent to <strong>${foundry.utils.escapeHTML(to)}</strong> from now on.</p><p>Only say yes if you changed the address yourself, or know who did and why. Whoever runs that address can use the key as you. If in doubt, say no and revoke the key on your Account page in GM's Almanac.</p>`,
+      rejectClose: false,
+    });
+    if (yes) await game.settings.set(ID, 'keySite', to);
+  }
   static #openEntry(event, target) { openEntry(Number(target.dataset.id)); }
   static #tick(event, target) { return AlmanacWindow.#guard(async () => { await client().post('clock_tick', { id: Number(target.dataset.id), by: 1 }); await refresh(true); }); }
 }
@@ -235,8 +257,12 @@ Hooks.once('ready', () => {
     passShifts,
     syncJournal,
     openEntry,
-    client,
+    /** Ask the site, as this client's key may: get('clocks'), post('clock_tick', { id, by: 1 }). The key itself is not handed out. */
+    get: (action, query) => client().get(action, query),
+    post: (action, body) => client().post(action, body),
   };
+  // a key saved before the module kept its address: it was for the address the world has now
+  if (String(setting('apiKey') || '').trim() && !setting('keySite')) game.settings.set(ID, 'keySite', siteBase(setting('site')));
   restart();
   if (setting('openOnLoad') && (hasKey() || setting('table'))) open();
 });
